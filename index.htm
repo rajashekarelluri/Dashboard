@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Advanced Bounce Rate Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Chart.js and Data Labels Plugin -->
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            margin: 0;
+            background: linear-gradient(135deg, #3b8d99, #6b6b83, #aa4b6b);
+            color: #333;
+            animation: gradientShift 15s ease infinite;
+            background-size: 400% 400%;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .container { max-width: 1200px; margin: auto; background: #fff; padding: 20px; margin-top: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); transition: transform 0.3s; }
+        .container:hover { transform: scale(1.01); }
+        h1 { text-align: center; color: #3b8d99; text-shadow: 2px 2px #ddd; }
+        .scorecards { display: flex; justify-content: space-around; margin: 20px 0; flex-wrap: wrap; }
+        .scorecard { background: linear-gradient(135deg, #667eea, #764ba2); color: white; flex: 1; margin: 10px; padding: 20px; border-radius: 15px; text-align: center; font-size: 1.8rem; box-shadow: 0 15px 25px rgba(0,0,0,0.2); transition: transform 0.3s, box-shadow 0.3s; }
+        .scorecard:hover { transform: translateY(-5px); box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+        .filters { display: flex; justify-content: center; margin-bottom: 20px; gap: 10px; flex-wrap: wrap; }
+        input[type="date"], button { padding: 12px; font-size: 1rem; border-radius: 8px; border: 1px solid #ddd; }
+        button { background: #667eea; color: white; border: none; cursor: pointer; transition: background 0.3s; }
+        button:hover { background: #5a67d8; }
+        canvas { margin-top: 20px; background: #fafafa; border-radius: 10px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Bounce Rate Analysis Dashboard</h1>
+    <div class="scorecards">
+        <div class="scorecard" id="totalBounced">Bounced Emails: 0</div>
+        <div class="scorecard" id="totalCampaigns">Total Unique Campaigns: 102</div>
+    </div>
+    <div class="filters">
+        <input type="date" id="startDate">
+        <input type="date" id="endDate">
+        <button onclick="applyFilters()">Apply</button>
+        <button onclick="loadData()">Refresh</button>
+    </div>
+    <canvas id="bounceCountChart" height="100"></canvas>
+    <canvas id="bounceRateChart" height="100"></canvas>
+    <canvas id="countryChart" height="100"></canvas>
+    <canvas id="weekChart" height="100"></canvas>
+</div>
+
+<script defer>
+document.addEventListener('DOMContentLoaded', function() {
+    const sheetId = "1AKDQyiX92ZeBgrzhyegsNP-33GomyLPVyMzoleEKuR0";
+    const apiKey = "AIzaSyDJYjWpouuinMF42C3mJ-j5K7cVe0xJaeM";
+    let rawData = [];
+    let countChart, rateChart, countryChart, weekChart;
+
+    function loadData() {
+        fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Analysis!A:E?key=${apiKey}`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.values) throw new Error('No values found in A:E');
+                rawData = data.values.slice(1).map(row => ({
+                    date: row[0],
+                    bounced: parseInt(row[1] || 0),
+                    campaigns: parseInt(row[2] || 0),
+                    rate: parseFloat(row[3] || 0),
+                    avgRate: parseFloat(row[4] || 0)
+                }));
+                updateDashboard(rawData);
+            }).catch(console.error);
+
+        fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Analysis!M:Q?key=${apiKey}`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.values) throw new Error('No values found in M:Q');
+                drawCountryChart(data.values.slice(1));
+            }).catch(console.error);
+
+        fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Analysis!G:K?key=${apiKey}`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.values) throw new Error('No values found in G:K');
+                drawWeekChart(data.values.slice(1));
+            }).catch(console.error);
+    }
+
+    function updateDashboard(data) {
+        const bouncedSum = data.reduce((sum, item) => sum + item.bounced, 0);
+        document.getElementById('totalBounced').innerText = `Bounced Emails: ${bouncedSum}`;
+        const labels = data.map(item => item.date);
+        const bounceCounts = data.map(item => item.bounced);
+        const bounceRates = data.map(item => item.rate);
+        const avgRates = data.map(item => item.avgRate);
+        if (countChart) countChart.destroy();
+        countChart = new Chart(document.getElementById('bounceCountChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels, datasets: [{ label: 'Bounced Emails', data: bounceCounts, backgroundColor: '#667eea' }] },
+            options: { plugins: { title: { display: true, text: 'Day wise Bounce Count' }, datalabels: { anchor: 'end', align: 'end', color: '#000', font: { weight: 'bold' } } } },
+            plugins: [ChartDataLabels]
+        });
+        if (rateChart) rateChart.destroy();
+        rateChart = new Chart(document.getElementById('bounceRateChart').getContext('2d'), {
+            type: 'line',
+            data: { labels, datasets: [
+                { label: 'Bounce Rate', data: bounceRates, borderColor: '#e74c3c', tension: 0.4, datalabels: { align: 'end', anchor: 'end', color: '#000', font: { weight: 'bold' }, formatter: v => (v*100).toFixed(2)+'%' } },
+                { label: 'Average Bounce Rate', data: avgRates, type: 'line', borderColor: '#95a5a6', borderDash: [5,5], tension: 0.4, datalabels: { display: false } }
+            ] },
+            options: { plugins: { title: { display: true, text: 'Day wise Bounce Ratio' } } },
+            plugins: [ChartDataLabels]
+        });
+    }
+
+    function drawCountryChart(rows) {
+    if (countryChart) countryChart.destroy();
+    const labels = rows.map(r => r[0]);
+    const bounce = rows.map(r => parseFloat(r[3]));
+    const avg = rows.map(r => parseFloat(r[4]));
+    countryChart = new Chart(document.getElementById('countryChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Bounce Rate',
+                    data: bounce,
+                    backgroundColor: '#f1c40f',
+                    yAxisID: 'y',
+                    datalabels: {
+                        align: 'end',
+                        anchor: 'end',
+                        color: '#000',
+                        font: { weight: 'bold' },
+                        formatter: v => v.toFixed(2) + '%' // removed *100
+                    }
+                },
+                {
+                    label: 'Average Bounce rate',
+                    data: avg,
+                    type: 'line',
+                    borderColor: '#3498db',
+                    borderDash: [5, 5],
+                    yAxisID: 'y',
+                    datalabels: { display: false }
+                }
+            ]
+        },
+        options: {
+            plugins: {
+                title: { display: true, text: '📍 Country wise Bounce Ratio' }
+            },
+            scales: { y: { beginAtZero: true } }
+        },
+        plugins: [ChartDataLabels]
+    });
+}
+
+
+    function drawWeekChart(rows) {
+    if (weekChart) weekChart.destroy();
+    const order = ["WE 2025-06-02","WE 2025-06-09","WE 2025-06-16","WE 2025-06-30","WE 2025-06-23","WE 2025-07-07"];
+    rows.sort((a,b)=> order.indexOf(a[0]) - order.indexOf(b[0]));
+    const labels = rows.map(r => r[0]);
+    const bounce = rows.map(r => parseFloat(r[3]));
+    const avg = rows.map(r => parseFloat(r[4]));
+    weekChart = new Chart(document.getElementById('weekChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Bounce Rate',
+                    data: bounce,
+                    backgroundColor: '#1abc9c',
+                    yAxisID: 'y',
+                    datalabels: {
+                        align: 'end',
+                        anchor: 'end',
+                        color: '#000',
+                        font: { weight: 'bold' },
+                        formatter: v => v.toFixed(2) + '%' // fixed here
+                    }
+                },
+                {
+                    label: 'Average Bounce rate',
+                    data: avg,
+                    type: 'line',
+                    borderColor: '#2980b9',
+                    borderDash: [5,5],
+                    yAxisID: 'y',
+                    datalabels: { display: false }
+                }
+            ]
+        },
+        options: {
+            plugins: {
+                title: { display: true, text: '📅 Week wise Bounce Ratio' }
+            },
+            scales: { y: { beginAtZero: true } }
+        },
+        plugins: [ChartDataLabels]
+    });
+}
+
+
+    function applyFilters() {
+        const sDate = new Date(document.getElementById('startDate').value);
+        const eDate = new Date(document.getElementById('endDate').value);
+        if (isNaN(sDate)||isNaN(eDate)) return alert('Select valid dates');
+        const filtered = rawData.filter(r => new Date(r.date)>=sDate && new Date(r.date)<=eDate);
+        updateDashboard(filtered);
+    }
+
+    window.applyFilters = applyFilters;
+    window.loadData = loadData;
+    loadData();
+});
+</script>
+
+</body>
+</html>
