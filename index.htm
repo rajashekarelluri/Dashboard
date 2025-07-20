@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', function() {
         rateChart = new Chart(document.getElementById('bounceRateChart').getContext('2d'), {
             type: 'line',
             data: { labels, datasets: [
-                { label: 'Bounce Rate', data: bounceRates, borderColor: '#e74c3c', tension: 0.4, datalabels: { align: 'end', anchor: 'end', color: '#000', font: { weight: 'bold' }, formatter: v => (v*100).toFixed(2)+'%' } },
+                { label: 'Bounce Rate', data: bounceRates, borderColor: '#e74c3c', tension: 0.4, datalabels: { align: 'end', anchor: 'end', color: '#000', font: { weight: 'bold' }, formatter: v => v.toFixed(2) + '%' } },
                 { label: 'Average Bounce Rate', data: avgRates, type: 'line', borderColor: '#95a5a6', borderDash: [5,5], tension: 0.4, datalabels: { display: false } }
             ] },
             options: { plugins: { title: { display: true, text: 'Day wise Bounce Ratio' } } },
